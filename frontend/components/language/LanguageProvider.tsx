@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 export type Language = "ar" | "en";
+export type Theme = "dark" | "light";
 
 type Dictionary = {
   app: {
@@ -19,6 +20,9 @@ type Dictionary = {
     doctorName: string;
     doctorRole: string;
     switchTo: string;
+    themeDark: string;
+    themeLight: string;
+    switchThemeTo: string;
   };
   upload: {
     title: string;
@@ -57,6 +61,9 @@ const dictionaries: Record<Language, Dictionary> = {
       doctorName: "د. أحمد علي",
       doctorRole: "أخصائي أشعة",
       switchTo: "English",
+      themeDark: "داكن",
+      themeLight: "فاتح",
+      switchThemeTo: "تغيير الثيم",
     },
     upload: {
       title: "بدء تحليل طبي جديد",
@@ -97,6 +104,9 @@ const dictionaries: Record<Language, Dictionary> = {
       doctorName: "Dr. Ahmad Ali",
       doctorRole: "Radiology specialist",
       switchTo: "العربية",
+      themeDark: "Dark",
+      themeLight: "Light",
+      switchThemeTo: "Switch theme",
     },
     upload: {
       title: "Start a new medical analysis",
@@ -126,20 +136,27 @@ const dictionaries: Record<Language, Dictionary> = {
 
 type LanguageContextValue = {
   language: Language;
+  theme: Theme;
   direction: "rtl" | "ltr";
   t: Dictionary;
   toggleLanguage: () => void;
+  toggleTheme: () => void;
 };
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguage] = useState<Language>("ar");
+  const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
     const storedLanguage = window.localStorage.getItem("clinicalmind-language");
+    const storedTheme = window.localStorage.getItem("clinicalmind-theme");
     if (storedLanguage === "ar" || storedLanguage === "en") {
       setLanguage(storedLanguage);
+    }
+    if (storedTheme === "dark" || storedTheme === "light") {
+      setTheme(storedTheme);
     }
   }, []);
 
@@ -151,16 +168,23 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem("clinicalmind-language", language);
   }, [language]);
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem("clinicalmind-theme", theme);
+  }, [theme]);
+
   const value = useMemo<LanguageContextValue>(() => {
     const direction = language === "ar" ? "rtl" : "ltr";
 
     return {
       language,
+      theme,
       direction,
       t: dictionaries[language],
       toggleLanguage: () => setLanguage((current) => (current === "ar" ? "en" : "ar")),
+      toggleTheme: () => setTheme((current) => (current === "dark" ? "light" : "dark")),
     };
-  }, [language]);
+  }, [language, theme]);
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
