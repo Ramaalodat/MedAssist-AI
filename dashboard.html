@@ -6,6 +6,7 @@
     <title>ClinicalMind | Dashboard</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cairo:wght@400;500;600;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <link rel="stylesheet" href="dashboard-styles.css">
     <script id="tailwind-config">
         tailwind.config = {
             darkMode: "class",
@@ -456,72 +457,163 @@
             }, 2000);
         }
 
-        function analyzeDiagnosis() {
+        async function analyzeDiagnosis() {
             const symptomsInput = document.getElementById('symptomsInput');
             const symptoms = symptomsInput.value.trim();
 
-            if (!symptoms) {
-                alert(translations[currentLanguage].selectImage);
+            if (!symptoms || symptoms.length < 10) {
+                alert(currentLanguage === 'en' ? 'Please enter detailed symptoms (at least 10 characters)' : 'يرجى إدخال أعراض مفصلة (10 أحرف على الأقل)');
                 return;
             }
 
+            // Detect language from symptoms
+            const symptomsLanguage = detectLanguage(symptoms);
+
             const analyzeBtn = document.getElementById('diagnosisBtn');
+            const resultContainer = document.getElementById('diagnosisResultContainer');
+            
             analyzeBtn.disabled = true;
             analyzeBtn.textContent = translations[currentLanguage].analyzing;
 
-            setTimeout(() => {
-                const resultContainer = document.getElementById('diagnosisResultContainer');
+            // Show loading state
+            resultContainer.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-12">
+                    <div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 pulse-animation">
+                        <span class="material-symbols-outlined text-4xl text-primary">psychology</span>
+                    </div>
+                    <p class="text-on-surface font-semibold">${currentLanguage === 'en' ? 'AI is analyzing your symptoms...' : 'الذكاء الاصطناعي يحلل الأعراض...'}</p>
+                    <p class="text-outline text-sm mt-2">${currentLanguage === 'en' ? 'This may take a few moments' : 'قد يستغرق هذا بضع لحظات'}</p>
+                </div>
+            `;
+
+            try {
+                // Call FastAPI backend with detected language
+                const response = await fetch('http://localhost:8000/analyze-symptoms', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        symptoms: symptoms,
+                        language: symptomsLanguage  // Use detected language from symptoms
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Analysis failed');
+                }
+
+                const data = await response.json();
                 
+                // Determine severity color
+                const severityColors = {
+                    'Mild': 'tertiary',
+                    'Moderate': 'primary',
+                    'Severe': 'error',
+                    'Critical': 'error',
+                    'خفيف': 'tertiary',
+                    'متوسط': 'primary',
+                    'شديد': 'error',
+                    'حرج': 'error'
+                };
+                const severityColor = severityColors[data.severity] || 'primary';
+
+                // Display results
                 resultContainer.innerHTML = `
                     <div class="space-y-6">
-                        <div class="glass-panel rounded-2xl p-panel-padding">
-                            <h4 class="font-headline-sm text-on-surface mb-4">Possible Diseases</h4>
-                            <div class="space-y-3">
-                                <div class="flex items-center justify-between p-3 bg-surface-container-high/30 rounded-xl">
-                                    <span class="text-on-surface">Influenza</span>
-                                    <span class="text-tertiary font-bold">85%</span>
+                        <!-- Disease Name & Severity - Side by Side -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-surface-container-low/50 rounded-xl p-5 border border-outline-variant/10">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <span class="material-symbols-outlined text-primary">diagnosis</span>
+                                    <h4 class="text-sm font-semibold text-outline uppercase tracking-wider">${symptomsLanguage === 'en' ? 'Diagnosis' : 'التشخيص'}</h4>
                                 </div>
-                                <div class="flex items-center justify-between p-3 bg-surface-container-high/30 rounded-xl">
-                                    <span class="text-on-surface">Common Cold</span>
-                                    <span class="text-tertiary font-bold">72%</span>
-                                </div>
+                                <p class="text-2xl font-bold text-on-surface">${data.disease_name}</p>
                             </div>
-                        </div>
-                        
-                        <div class="glass-panel rounded-2xl p-panel-padding">
-                            <h4 class="font-headline-sm text-on-surface mb-4" data-i18n="confidence">${translations[currentLanguage].confidence}</h4>
-                            <div class="flex items-center gap-4">
-                                <div class="flex-1 bg-surface-container-high rounded-full h-2">
-                                    <div class="bg-tertiary h-2 rounded-full" style="width: 85%"></div>
+
+                            <div class="bg-surface-container-low/50 rounded-xl p-5 border border-outline-variant/10">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <span class="material-symbols-outlined text-${severityColor}">emergency</span>
+                                    <h4 class="text-sm font-semibold text-outline uppercase tracking-wider">${symptomsLanguage === 'en' ? 'Severity' : 'درجة الخطورة'}</h4>
                                 </div>
-                                <span class="text-tertiary font-bold">85%</span>
+                                <span class="px-4 py-2 rounded-full bg-${severityColor}/20 text-${severityColor} font-bold text-lg inline-block">${data.severity}</span>
                             </div>
                         </div>
 
-                        <div class="glass-panel rounded-2xl p-panel-padding">
-                            <h4 class="font-headline-sm text-on-surface mb-4" data-i18n="severity">${translations[currentLanguage].severity}</h4>
-                            <span class="px-4 py-2 rounded-full bg-tertiary/20 text-tertiary font-bold text-sm">Moderate</span>
+                        <!-- Causes & Treatments - Side by Side -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-surface-container-low/50 rounded-xl p-5 border border-outline-variant/10">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <div class="w-10 h-10 rounded-lg bg-error/10 flex items-center justify-center">
+                                        <span class="material-symbols-outlined text-error">coronavirus</span>
+                                    </div>
+                                    <h4 class="font-semibold text-on-surface">${symptomsLanguage === 'en' ? 'Possible Causes' : 'الأسباب المحتملة'}</h4>
+                                </div>
+                                <ul class="space-y-2 text-on-surface-variant text-sm">
+                                    ${data.causes.map(cause => `
+                                        <li class="flex gap-2">
+                                            <span class="text-error">•</span>
+                                            <span>${cause}</span>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            </div>
+
+                            <div class="bg-surface-container-low/50 rounded-xl p-5 border border-outline-variant/10">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <div class="w-10 h-10 rounded-lg bg-tertiary/10 flex items-center justify-center">
+                                        <span class="material-symbols-outlined text-tertiary">medication</span>
+                                    </div>
+                                    <h4 class="font-semibold text-on-surface">${symptomsLanguage === 'en' ? 'Recommended Treatments' : 'العلاجات الموصى بها'}</h4>
+                                </div>
+                                <ul class="space-y-2 text-on-surface-variant text-sm">
+                                    ${data.treatments.map(treatment => `
+                                        <li class="flex gap-2">
+                                            <span class="text-tertiary">•</span>
+                                            <span>${treatment}</span>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            </div>
                         </div>
 
-                        <div class="glass-panel rounded-2xl p-panel-padding">
-                            <h4 class="font-headline-sm text-on-surface mb-4" data-i18n="recommendations">${translations[currentLanguage].recommendations}</h4>
-                            <ul class="space-y-2 text-on-surface-variant">
-                                <li class="flex gap-2">
-                                    <span class="text-tertiary">•</span>
-                                    <span>Rest and stay hydrated</span>
-                                </li>
-                                <li class="flex gap-2">
-                                    <span class="text-tertiary">•</span>
-                                    <span>Monitor temperature regularly</span>
-                                </li>
-                            </ul>
+                        <!-- Disclaimer -->
+                        <div class="p-4 rounded-xl bg-error/5 border border-error/20 flex gap-3">
+                            <span class="material-symbols-outlined text-error text-xl">warning</span>
+                            <div class="flex-1 text-sm text-on-surface-variant">
+                                <p class="font-semibold text-error mb-1">${symptomsLanguage === 'en' ? 'Medical Disclaimer' : 'إخلاء مسؤولية طبية'}</p>
+                                <p>${symptomsLanguage === 'en' ? 'This AI analysis is for informational purposes only and should not replace professional medical advice.' : 'هذا التحليل بالذكاء الاصطناعي لأغراض إعلامية فقط ولا يجب أن يحل محل المشورة الطبية المهنية.'}</p>
+                            </div>
                         </div>
                     </div>
                 `;
 
+            } catch (error) {
+                console.error('Error:', error);
+                resultContainer.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-12">
+                        <div class="w-16 h-16 rounded-full bg-error/10 flex items-center justify-center mb-4">
+                            <span class="material-symbols-outlined text-4xl text-error">error</span>
+                        </div>
+                        <p class="text-error font-semibold mb-2">${currentLanguage === 'en' ? 'Analysis Failed' : 'فشل التحليل'}</p>
+                        <p class="text-outline text-sm text-center max-w-md">${error.message || (currentLanguage === 'en' ? 'Failed to analyze symptoms. Please check if the backend server is running on port 8000.' : 'فشل تحليل الأعراض. يرجى التحقق من تشغيل الخادم على المنفذ 8000.')}</p>
+                        <button onclick="analyzeDiagnosis()" class="mt-4 px-6 py-2 rounded-xl bg-primary text-on-primary font-bold hover:shadow-lg transition-all">
+                            ${currentLanguage === 'en' ? 'Try Again' : 'حاول مرة أخرى'}
+                        </button>
+                    </div>
+                `;
+            } finally {
                 analyzeBtn.disabled = false;
                 analyzeBtn.textContent = translations[currentLanguage].analyze;
-            }, 2000);
+            }
+        }
+
+        // Detect language from text
+        function detectLanguage(text) {
+            // Check if text contains Arabic characters
+            const arabicRegex = /[\u0600-\u06FF]/g;
+            return arabicRegex.test(text) ? 'ar' : 'en';
         }
     </script>
     <style id="font-style">
@@ -802,6 +894,13 @@
             background: rgba(141, 144, 160, 0.2);
             border-radius: 10px;
         }
+        .pulse-animation {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
     </style>
 </head>
 <body class="bg-background text-on-background font-body-md overflow-hidden transition-colors duration-300">
@@ -832,8 +931,8 @@
                     <span class="font-headline-sm text-[14px]" data-i18n="brainXray">Brain X-ray</span>
                 </a>
                 <a class="text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-high dark:hover:bg-white/5 rounded-xl flex items-center gap-3.5 px-4 py-3.5 transition-all duration-200 cursor-pointer" onclick="showPage('analysis-chest')">
-                    <span class="material-symbols-outlined text-[22px]">lungs</span>
-                    <span class="font-headline-sm text-[14px]" data-i18n="chestXray">Chest X-ray</span>
+                    <span class="material-symbols-outlined text-[22px]">favorite</span>
+                    <span class="font-headline-sm text-[14px]" data-i18n="chestXray">أشعة الصدر</span>
                 </a>
                 <a class="text-on-surface-variant/70 hover:text-on-surface hover:bg-surface-container-high dark:hover:bg-white/5 rounded-xl flex items-center gap-3.5 px-4 py-3.5 transition-all duration-200 cursor-pointer" onclick="showPage('analysis-bone')">
                     <span class="material-symbols-outlined text-[22px]">orthopedics</span>
@@ -1046,5 +1145,9 @@
 
         </div>
     </main>
+
+    <!-- JavaScript Files -->
+    <script src="gemini-api.js"></script>
+    <script src="dashboard-script.js"></script>
 </body>
 </html>
